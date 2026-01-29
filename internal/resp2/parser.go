@@ -226,6 +226,35 @@ func (p *DefaultRESP2Parser) Serialize(value *RESPValue) []byte {
 
 // ParseCommand converts a RESPValue to a Command
 func (p *DefaultRESP2Parser) ParseCommand(value *RESPValue) (*Command, error) {
-	// Implementation will be added in later tasks
-	return nil, nil
+	if value == nil {
+		return nil, errors.New("command value cannot be nil")
+	}
+	
+	if value.Type != Array {
+		return nil, errors.New("command must be an array")
+	}
+	
+	if value.Null || len(value.Array) == 0 {
+		return nil, errors.New("command array cannot be empty")
+	}
+	
+	// First element should be the command name
+	if value.Array[0].Type != BulkString {
+		return nil, errors.New("command name must be a bulk string")
+	}
+	
+	cmd := &Command{
+		Name: strings.ToUpper(value.Array[0].Str),
+		Args: make([]string, len(value.Array)-1),
+	}
+	
+	// Extract arguments
+	for i := 1; i < len(value.Array); i++ {
+		if value.Array[i].Type != BulkString {
+			return nil, fmt.Errorf("command argument %d must be a bulk string", i)
+		}
+		cmd.Args[i-1] = value.Array[i].Str
+	}
+	
+	return cmd, nil
 }

@@ -33,3 +33,4 @@ go.work.sum
 
 # binary
 redis-like-server
+redis-server

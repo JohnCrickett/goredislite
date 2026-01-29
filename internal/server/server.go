@@ -160,6 +160,11 @@ func (s *Server) WaitForShutdown() {
 	<-s.shutdown
 }
 
+// GetListener returns the server's listener (for testing purposes)
+func (s *Server) GetListener() net.Listener {
+	return s.listener
+}
+
 // handleConnection handles individual client connections
 func (s *Server) handleConnection(conn net.Conn) {
 	defer s.wg.Done()

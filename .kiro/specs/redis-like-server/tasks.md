@@ -121,28 +121,28 @@ This implementation plan breaks down the Redis-like server development into disc
     - **Property 11: Connection Cleanup on Unexpected Disconnection**
     - **Validates: Requirements 6.4**
 
-- [ ] 7. Implement main server component
-  - [ ] 7.1 Create Server struct and initialization
+- [x] 7. Implement main server component
+  - [x] 7.1 Create Server struct and initialization
     - Set up TCP listener on configurable port
     - Initialize all components (store, parser, handler, connection manager)
     - _Requirements: 1.1_
 
-  - [ ] 7.2 Implement connection acceptance loop
+  - [x] 7.2 Implement connection acceptance loop
     - Accept incoming TCP connections
     - Spawn goroutines for each client connection
     - _Requirements: 1.2, 1.3_
 
-  - [ ] 7.3 Implement client request-response loop
+  - [x] 7.3 Implement client request-response loop
     - Read RESP2 commands from client connections
     - Parse, execute, and send responses
     - Handle connection errors and cleanup
     - _Requirements: 2.1, 2.2, 7.3_
 
-  - [ ] 7.4 Write property test for concurrent client processing
+  - [x] 7.4 Write property test for concurrent client processing
     - **Property 3: Concurrent Client Processing** (full concurrency aspect)
     - **Validates: Requirements 1.3, 6.1, 6.2**
 
-  - [ ] 7.5 Write property test for PING command reliability
+  - [x] 7.5 Write property test for PING command reliability
     - **Property 5: PING Command Reliability**
     - **Validates: Requirements 3.3**
 

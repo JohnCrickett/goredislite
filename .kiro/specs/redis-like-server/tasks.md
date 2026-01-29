@@ -34,25 +34,25 @@ This implementation plan breaks down the Redis-like server development into disc
     - Test boundary conditions and special characters
     - _Requirements: 2.3_
 
-- [ ] 3. Implement thread-safe key-value store
-  - [ ] 3.1 Create KeyValueStore with concurrent access support
+- [x] 3. Implement thread-safe key-value store
+  - [x] 3.1 Create KeyValueStore with concurrent access support
     - Implement map-based storage with RWMutex protection
     - Add Set, Get, Exists, Delete, and DeleteMultiple methods
     - _Requirements: 4.1, 4.2, 4.3, 5.1, 5.2, 5.3, 5.4_
 
-  - [ ] 3.2 Write property test for SET-GET round-trip consistency
+  - [x] 3.2 Write property test for SET-GET round-trip consistency
     - **Property 6: SET-GET Round-trip Consistency**
     - **Validates: Requirements 4.1, 4.2, 4.5**
 
-  - [ ] 3.3 Write property test for EXISTS count accuracy
+  - [x] 3.3 Write property test for EXISTS count accuracy
     - **Property 8: EXISTS Count Accuracy**
     - **Validates: Requirements 5.1, 5.2**
 
-  - [ ] 3.4 Write property test for DEL count accuracy
+  - [x] 3.4 Write property test for DEL count accuracy
     - **Property 9: DEL Count Accuracy**
     - **Validates: Requirements 5.3, 5.4**
 
-  - [ ] 3.5 Write property test for concurrent data consistency
+  - [x] 3.5 Write property test for concurrent data consistency
     - **Property 3: Concurrent Client Processing** (data consistency aspect)
     - **Validates: Requirements 6.3**
 

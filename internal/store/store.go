@@ -28,29 +28,49 @@ func NewInMemoryStore() KeyValueStore {
 
 // Set stores a key-value pair
 func (s *InMemoryStore) Set(key, value string) {
-	// Implementation will be added in later tasks
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.data[key] = value
 }
 
 // Get retrieves a value by key
 func (s *InMemoryStore) Get(key string) (string, bool) {
-	// Implementation will be added in later tasks
-	return "", false
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+	value, exists := s.data[key]
+	return value, exists
 }
 
 // Exists checks if a key exists
 func (s *InMemoryStore) Exists(key string) bool {
-	// Implementation will be added in later tasks
-	return false
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+	_, exists := s.data[key]
+	return exists
 }
 
 // Delete removes a key
 func (s *InMemoryStore) Delete(key string) bool {
-	// Implementation will be added in later tasks
-	return false
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	_, exists := s.data[key]
+	if exists {
+		delete(s.data, key)
+	}
+	return exists
 }
 
 // DeleteMultiple removes multiple keys and returns count of deleted keys
 func (s *InMemoryStore) DeleteMultiple(keys []string) int {
-	// Implementation will be added in later tasks
-	return 0
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	
+	deletedCount := 0
+	for _, key := range keys {
+		if _, exists := s.data[key]; exists {
+			delete(s.data, key)
+			deletedCount++
+		}
+	}
+	return deletedCount
 }

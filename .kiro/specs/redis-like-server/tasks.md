@@ -99,25 +99,25 @@ This implementation plan breaks down the Redis-like server development into disc
     - **Property 10: Error Handling Robustness**
     - **Validates: Requirements 2.3, 7.1, 7.2, 7.3, 7.4**
 
-- [ ] 5. Checkpoint - Core functionality validation
+- [x] 5. Checkpoint - Core functionality validation
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 6. Implement connection management
-  - [ ] 6.1 Create ConnectionManager for client lifecycle
+- [x] 6. Implement connection management
+  - [x] 6.1 Create ConnectionManager for client lifecycle
     - Implement connection tracking and cleanup
     - Add connection limits and timeout handling
     - _Requirements: 1.2, 1.4, 6.4_
 
-  - [ ] 6.2 Create ClientConnection wrapper
+  - [x] 6.2 Create ClientConnection wrapper
     - Wrap net.Conn with buffered I/O
     - Add connection metadata and state tracking
     - _Requirements: 1.2_
 
-  - [ ] 6.3 Write property test for connection lifecycle management
+  - [x] 6.3 Write property test for connection lifecycle management
     - **Property 2: Connection Lifecycle Management**
     - **Validates: Requirements 1.2, 1.4**
 
-  - [ ] 6.4 Write property test for connection cleanup on unexpected disconnection
+  - [x] 6.4 Write property test for connection cleanup on unexpected disconnection
     - **Property 11: Connection Cleanup on Unexpected Disconnection**
     - **Validates: Requirements 6.4**
 

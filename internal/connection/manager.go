@@ -16,6 +16,7 @@ type ConnectionManager interface {
 	GetConnection(id string) *ClientConnection
 	GetActiveCount() int
 	CleanupStaleConnections()
+	CloseAllConnections()
 }
 
 // ClientConnection wraps a network connection with additional metadata
@@ -178,6 +179,18 @@ func (cm *DefaultConnectionManager) CleanupStaleConnections() {
 			clientConn.Close()
 			delete(cm.connections, id)
 		}
+	}
+}
+
+// CloseAllConnections closes all active connections
+func (cm *DefaultConnectionManager) CloseAllConnections() {
+	cm.mutex.Lock()
+	defer cm.mutex.Unlock()
+	
+	// Close all connections
+	for id, clientConn := range cm.connections {
+		clientConn.Close()
+		delete(cm.connections, id)
 	}
 }
 

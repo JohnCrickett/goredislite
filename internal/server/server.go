@@ -1,8 +1,13 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"net"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
 	"redis-like-server/internal/connection"
@@ -27,12 +32,20 @@ type Server struct {
 	handler     handler.CommandHandler
 	connManager connection.ConnectionManager
 	config      *ServerConfig
+	ctx         context.Context
+	cancel      context.CancelFunc
+	wg          sync.WaitGroup
+	shutdown    chan struct{}
 }
 
 // NewServer creates a new server instance
 func NewServer(config *ServerConfig) *Server {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &Server{
-		config: config,
+		config:   config,
+		ctx:      ctx,
+		cancel:   cancel,
+		shutdown: make(chan struct{}),
 	}
 }
 
@@ -53,42 +66,104 @@ func (s *Server) Start() error {
 	
 	s.listener = listener
 	
+	// Set up signal handling for graceful shutdown
+	s.setupSignalHandling()
+	
 	// Start connection acceptance loop
+	s.wg.Add(1)
 	go s.acceptConnections()
 	
 	return nil
 }
 
+// setupSignalHandling sets up signal handlers for graceful shutdown
+func (s *Server) setupSignalHandling() {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	
+	go func() {
+		<-sigChan
+		fmt.Println("\nReceived shutdown signal, initiating graceful shutdown...")
+		s.Stop()
+	}()
+}
+
 // acceptConnections handles the connection acceptance loop
 func (s *Server) acceptConnections() {
+	defer s.wg.Done()
+	
 	for {
-		// Accept incoming TCP connections
-		conn, err := s.listener.Accept()
-		if err != nil {
-			// If listener is closed, exit gracefully
-			if opErr, ok := err.(*net.OpError); ok && opErr.Err.Error() == "use of closed network connection" {
-				return
+		select {
+		case <-s.ctx.Done():
+			// Server is shutting down
+			return
+		default:
+			// Accept incoming TCP connections
+			conn, err := s.listener.Accept()
+			if err != nil {
+				// Check if this is due to listener being closed during shutdown
+				select {
+				case <-s.ctx.Done():
+					return
+				default:
+					// Log other errors but continue accepting connections
+					fmt.Printf("Error accepting connection: %v\n", err)
+					continue
+				}
 			}
-			// Log other errors but continue accepting connections
-			fmt.Printf("Error accepting connection: %v\n", err)
-			continue
+			
+			// Spawn goroutine for each client connection
+			s.wg.Add(1)
+			go s.handleConnection(conn)
 		}
-		
-		// Spawn goroutine for each client connection
-		go s.handleConnection(conn)
 	}
 }
 
 // Stop gracefully shuts down the server
 func (s *Server) Stop() error {
+	// Signal shutdown to all goroutines
+	s.cancel()
+	
+	// Close the listener to stop accepting new connections
 	if s.listener != nil {
-		return s.listener.Close()
+		s.listener.Close()
 	}
+	
+	// Close all existing client connections
+	if s.connManager != nil {
+		fmt.Println("Closing all client connections...")
+		s.connManager.CloseAllConnections()
+	}
+	
+	// Wait for all goroutines to finish with timeout
+	done := make(chan struct{})
+	go func() {
+		s.wg.Wait()
+		close(done)
+	}()
+	
+	select {
+	case <-done:
+		fmt.Println("All connections closed gracefully")
+	case <-time.After(10 * time.Second):
+		fmt.Println("Timeout waiting for connections to close, forcing shutdown")
+	}
+	
+	// Signal that shutdown is complete
+	close(s.shutdown)
+	
 	return nil
+}
+
+// WaitForShutdown blocks until the server has shut down
+func (s *Server) WaitForShutdown() {
+	<-s.shutdown
 }
 
 // handleConnection handles individual client connections
 func (s *Server) handleConnection(conn net.Conn) {
+	defer s.wg.Done()
+	
 	// Add connection to manager
 	clientConn := s.connManager.AddConnection(conn)
 	if clientConn == nil {
@@ -112,54 +187,60 @@ func (s *Server) handleConnection(conn net.Conn) {
 	
 	// Client request-response loop
 	for {
-		// Read RESP2 commands from client connections
-		respValue, err := s.parser.Parse(clientConn.GetReader())
-		if err != nil {
-			// Handle connection errors and cleanup
-			if err.Error() == "EOF" {
-				// Client disconnected gracefully
+		select {
+		case <-s.ctx.Done():
+			// Server is shutting down, close connection gracefully
+			return
+		default:
+			// Read RESP2 commands from client connections
+			respValue, err := s.parser.Parse(clientConn.GetReader())
+			if err != nil {
+				// Handle connection errors and cleanup
+				if err.Error() == "EOF" {
+					// Client disconnected gracefully
+					return
+				}
+				// Send error response for malformed input
+				errorResp := &resp2.RESPValue{
+					Type: resp2.Error,
+					Str:  fmt.Sprintf("ERR Protocol error: %v", err),
+				}
+				responseBytes := s.parser.Serialize(errorResp)
+				clientConn.Write(responseBytes)
+				continue
+			}
+			
+			// Parse command from RESP2 value
+			cmd, err := s.parser.ParseCommand(respValue)
+			if err != nil {
+				// Send error response for invalid command format
+				errorResp := &resp2.RESPValue{
+					Type: resp2.Error,
+					Str:  fmt.Sprintf("ERR Protocol error: %v", err),
+				}
+				responseBytes := s.parser.Serialize(errorResp)
+				clientConn.Write(responseBytes)
+				continue
+			}
+			
+			// Execute command and get response
+			response := s.handler.Execute(cmd)
+			
+			// Send response back to client
+			responseBytes := s.parser.Serialize(response)
+			err = clientConn.Write(responseBytes)
+			if err != nil {
+				// Connection write error, cleanup and exit
 				return
 			}
-			// Send error response for malformed input
-			errorResp := &resp2.RESPValue{
-				Type: resp2.Error,
-				Str:  fmt.Sprintf("ERR Protocol error: %v", err),
+			
+			// Update connection timeouts for next iteration
+			if s.config.ReadTimeout > 0 {
+				conn.SetReadDeadline(time.Now().Add(s.config.ReadTimeout))
 			}
-			responseBytes := s.parser.Serialize(errorResp)
-			clientConn.Write(responseBytes)
-			continue
-		}
-		
-		// Parse command from RESP2 value
-		cmd, err := s.parser.ParseCommand(respValue)
-		if err != nil {
-			// Send error response for invalid command format
-			errorResp := &resp2.RESPValue{
-				Type: resp2.Error,
-				Str:  fmt.Sprintf("ERR Protocol error: %v", err),
+			if s.config.WriteTimeout > 0 {
+				conn.SetWriteDeadline(time.Now().Add(s.config.WriteTimeout))
 			}
-			responseBytes := s.parser.Serialize(errorResp)
-			clientConn.Write(responseBytes)
-			continue
-		}
-		
-		// Execute command and get response
-		response := s.handler.Execute(cmd)
-		
-		// Send response back to client
-		responseBytes := s.parser.Serialize(response)
-		err = clientConn.Write(responseBytes)
-		if err != nil {
-			// Connection write error, cleanup and exit
-			return
-		}
-		
-		// Update connection timeouts for next iteration
-		if s.config.ReadTimeout > 0 {
-			conn.SetReadDeadline(time.Now().Add(s.config.ReadTimeout))
-		}
-		if s.config.WriteTimeout > 0 {
-			conn.SetWriteDeadline(time.Now().Add(s.config.WriteTimeout))
 		}
 	}
 }

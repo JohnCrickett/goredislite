@@ -146,14 +146,14 @@ This implementation plan breaks down the Redis-like server development into disc
     - **Property 5: PING Command Reliability**
     - **Validates: Requirements 3.3**
 
-- [ ] 8. Add graceful shutdown and resource management
-  - [ ] 8.1 Implement graceful server shutdown
+- [x] 8. Add graceful shutdown and resource management
+  - [x] 8.1 Implement graceful server shutdown
     - Handle shutdown signals (SIGINT, SIGTERM)
     - Close all client connections gracefully
     - Clean up resources and stop goroutines
     - _Requirements: 1.4, 6.4_
 
-  - [ ] 8.2 Write property test for string value storage capacity
+  - [x] 8.2 Write property test for string value storage capacity
     - **Property 12: String Value Storage Capacity**
     - **Validates: Requirements 4.4**
 

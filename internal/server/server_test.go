@@ -248,13 +248,133 @@ func TestStringValueStorageCapacity(t *testing.T) {
 	properties := gopter.NewProperties(nil)
 
 	// Property 12: String Value Storage Capacity
+	// **Validates: Requirements 4.4**
 	// For any string value within memory constraints, the key-value store should be able to store and retrieve it correctly
 	properties.Property("string value storage capacity", prop.ForAll(
-		func(value string) bool {
-			// This test will be implemented in task 8.2
+		func(key string, value string, valueSize int) bool {
+			if key == "" {
+				return true // Skip empty keys
+			}
+			
+			// Generate different types of values based on valueSize
+			var testValue string
+			switch valueSize % 4 {
+			case 0:
+				testValue = value // Use generated string as-is
+			case 1:
+				testValue = "" // Empty string
+			case 2:
+				testValue = "a" // Single character
+			case 3:
+				// Create a larger string (up to 1KB)
+				size := valueSize % 1024
+				if size == 0 {
+					size = 1
+				}
+				testValue = string(make([]byte, size))
+				for i := range testValue {
+					testValue = testValue[:i] + "x" + testValue[i+1:]
+				}
+			}
+			
+			// Create server with test configuration
+			config := &ServerConfig{
+				Port:         0, // Use random available port
+				MaxClients:   10,
+				ReadTimeout:  5 * time.Second,
+				WriteTimeout: 5 * time.Second,
+			}
+			server := NewServer(config)
+			
+			// Start server
+			err := server.Start()
+			if err != nil {
+				t.Logf("Failed to start server: %v", err)
+				return false
+			}
+			defer server.Stop()
+			
+			// Get the actual port the server is listening on
+			addr := server.listener.Addr().(*net.TCPAddr)
+			port := addr.Port
+			
+			// Connect to server
+			conn, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", port))
+			if err != nil {
+				t.Logf("Failed to connect: %v", err)
+				return false
+			}
+			defer conn.Close()
+			
+			reader := bufio.NewReader(conn)
+			writer := bufio.NewWriter(conn)
+			
+			// Test SET command with the generated value
+			setCmd := fmt.Sprintf("*3\r\n$3\r\nSET\r\n$%d\r\n%s\r\n$%d\r\n%s\r\n", 
+				len(key), key, len(testValue), testValue)
+			
+			_, err = writer.WriteString(setCmd)
+			if err != nil {
+				t.Logf("Failed to send SET command: %v", err)
+				return false
+			}
+			writer.Flush()
+			
+			// Read SET response (should be +OK)
+			setResponse, err := reader.ReadString('\n')
+			if err != nil {
+				t.Logf("Failed to read SET response: %v", err)
+				return false
+			}
+			
+			if setResponse != "+OK\r\n" {
+				t.Logf("SET failed, expected +OK, got %q", setResponse)
+				return false
+			}
+			
+			// Test GET command to retrieve the value
+			getCmd := fmt.Sprintf("*2\r\n$3\r\nGET\r\n$%d\r\n%s\r\n", len(key), key)
+			
+			_, err = writer.WriteString(getCmd)
+			if err != nil {
+				t.Logf("Failed to send GET command: %v", err)
+				return false
+			}
+			writer.Flush()
+			
+			// Read GET response header
+			getResponse, err := reader.ReadString('\n')
+			if err != nil {
+				t.Logf("Failed to read GET response: %v", err)
+				return false
+			}
+			
+			// Verify bulk string response format
+			expectedHeader := fmt.Sprintf("$%d\r\n", len(testValue))
+			if getResponse != expectedHeader {
+				t.Logf("GET response header mismatch, expected %q, got %q", expectedHeader, getResponse)
+				return false
+			}
+			
+			// Read the actual value content
+			valueResponse, err := reader.ReadString('\n')
+			if err != nil {
+				t.Logf("Failed to read GET value: %v", err)
+				return false
+			}
+			
+			// Verify the retrieved value matches what was stored
+			expectedValue := testValue + "\r\n"
+			if valueResponse != expectedValue {
+				t.Logf("Value mismatch, expected %q, got %q", expectedValue, valueResponse)
+				return false
+			}
+			
 			return true
 		},
-		gen.AlphaString(),
+		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 && len(s) <= 100 }), // Key with reasonable length
+		gen.AlphaString().SuchThat(func(s string) bool { return len(s) <= 1000 }), // Value up to 1KB
+		gen.IntRange(0, 1023), // Size parameter for different value types
 	))
 
 	properties.TestingRun(t, gopter.ConsoleReporter(false))

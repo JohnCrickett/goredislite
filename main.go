@@ -32,4 +32,11 @@ func main() {
 	if err := srv.Start(); err != nil {
 		log.Fatalf("Failed to start server: %v", err)
 	}
+	
+	fmt.Printf("Server started successfully. Press Ctrl+C to shutdown gracefully.\n")
+	
+	// Wait for shutdown signal
+	srv.WaitForShutdown()
+	
+	fmt.Println("Server shutdown complete.")
 }
